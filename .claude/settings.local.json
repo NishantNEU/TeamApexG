@@ -4,7 +4,17 @@
       "Bash(ls:*)",
       "Read(//c/Users/**)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:d[k] for k in [''''exports'''',''''main'''',''''module''''] if k in d}, indent=2\\)\\)\")",
-      "Bash(curl -s \"http://localhost:3000/api/reputation?agent_id=25c7dc34-ee13-4066-881e-74914d01e430\")"
+      "Bash(curl -s \"http://localhost:3000/api/reputation?agent_id=25c7dc34-ee13-4066-881e-74914d01e430\")",
+      "Bash(npm run:*)",
+      "Bash(curl:*)",
+      "Bash(vercel --version)",
+      "Bash(npm install:*)",
+      "Bash(while read:*)",
+      "Bash(do echo:*)",
+      "Read(//c/Users/Sandeep Patil/Desktop/arbiter/**)",
+      "Bash(done)",
+      "Bash(python -c \"import sys,json; a=next\\(\\(a for a in json.load\\(sys.stdin\\)[''''results''''][''''agents''''] if a[''''name'''']==''''Story Spark''''\\),None\\); print\\(f''''jobs_completed={a[\"\"total_jobs_completed\"\"]} reputation={a[\"\"reputation_score\"\"]}''''\\)\")",
+      "Bash(python -c \"import sys; v=sys.stdin.read\\(\\).strip\\(\\); print\\(''''MDK_ACCESS_TOKEN: SET'''' if v else ''''MDK_ACCESS_TOKEN: EMPTY''''\\)\")"
     ]
   }
 }

@@ -1,35 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import dynamic from "next/dynamic";
+import "swagger-ui-react/swagger-ui.css";
+
+const SwaggerUI = dynamic(() => import("swagger-ui-react"), { ssr: false });
 
 export default function DocsPage() {
-  useEffect(() => {
-    // Load Swagger UI CSS
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = "https://unpkg.com/swagger-ui-dist@5/swagger-ui.css";
-    document.head.appendChild(link);
-
-    // Load Swagger UI bundle
-    const script = document.createElement("script");
-    script.src = "https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js";
-    script.onload = () => {
-      (window as any).SwaggerUIBundle({
-        url: "/api/openapi",
-        dom_id: "#swagger-ui",
-        presets: [
-          (window as any).SwaggerUIBundle.presets.apis,
-          (window as any).SwaggerUIBundle.SwaggerUIStandalonePreset,
-        ],
-        layout: "BaseLayout",
-        deepLinking: true,
-        defaultModelsExpandDepth: -1,
-        tryItOutEnabled: true,
-      });
-    };
-    document.body.appendChild(script);
-  }, []);
-
   return (
     <>
       <style>{`
@@ -79,9 +55,16 @@ export default function DocsPage() {
         .swagger-ui section.models.is-open h4 { border-bottom: 1px solid #1a1a2e; }
         .swagger-ui .model-title { color: #e4e4e7; }
         .swagger-ui .prop-type { color: #a855f7; }
-        #swagger-ui { max-width: 1200px; margin: 0 auto; padding: 0 16px 64px; }
+        #swagger-ui-wrapper { max-width: 1200px; margin: 0 auto; padding: 0 16px 64px; }
       `}</style>
-      <div id="swagger-ui" />
+      <div id="swagger-ui-wrapper">
+        <SwaggerUI
+          url="/api/openapi"
+          deepLinking={true}
+          defaultModelsExpandDepth={-1}
+          tryItOutEnabled={true}
+        />
+      </div>
     </>
   );
 }
