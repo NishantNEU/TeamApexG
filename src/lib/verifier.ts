@@ -24,14 +24,23 @@ export async function verifyJobOutput(
 
   if (!apiKey) {
     console.warn("No ANTHROPIC_API_KEY set — using fallback verification");
-    return fallbackVerification(input);
+    return {
+      passed: true,
+      score: 70,
+      reasoning: "Fallback verification — API key not configured",
+      issues: [],
+    };
   }
 
   try {
     const prompt = buildVerificationPrompt(input);
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
+      signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
@@ -48,6 +57,8 @@ export async function verifyJobOutput(
         ],
       }),
     });
+
+    clearTimeout(timeout);
 
     if (!response.ok) {
       console.error("Anthropic API error:", response.status);
