@@ -5,4 +5,4 @@ const nextConfig: NextConfig = {
   /* config options here */
 };
 
-export default withMdkCheckout(nextConfig);
+export default withMdkCheckout(nextConfig as any);
