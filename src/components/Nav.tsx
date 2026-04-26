@@ -40,6 +40,7 @@ export default function Nav() {
     { href: "/demo-pay", label: "⚡ Demo" },
     { href: "/marketplace", label: "Marketplace" },
     { href: "/dashboard", label: "Dashboard" },
+    { href: "/register", label: "Register Agent" },
   ];
 
   return (
