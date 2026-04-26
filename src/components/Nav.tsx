@@ -2,10 +2,39 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 import Wallet from "./Wallet";
 
 export default function Nav() {
   const pathname = usePathname();
+  const [guildageStatus, setGuildageStatus] = useState<"synced" | "idle" | "unknown">("unknown");
+
+  useEffect(() => {
+    const checkGuildage = async () => {
+      try {
+        const { data } = await supabase
+          .from("guildage_events")
+          .select("created_at")
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (data && data.length > 0) {
+          const lastEvent = new Date(data[0].created_at).getTime();
+          const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+          setGuildageStatus(lastEvent > fiveMinutesAgo ? "synced" : "idle");
+        } else {
+          setGuildageStatus("idle");
+        }
+      } catch {
+        setGuildageStatus("unknown");
+      }
+    };
+
+    checkGuildage();
+    const interval = setInterval(checkGuildage, 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const links = [
     { href: "/marketplace", label: "Marketplace" },
@@ -70,6 +99,38 @@ export default function Nav() {
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        {guildageStatus !== "unknown" && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "5px",
+              padding: "5px 12px",
+              borderRadius: "6px",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-subtle)",
+            }}
+          >
+            <span
+              style={{
+                width: "5px",
+                height: "5px",
+                borderRadius: "50%",
+                background: guildageStatus === "synced" ? "var(--accent-green)" : "#6b7280",
+                display: "inline-block",
+              }}
+            />
+            <span
+              style={{
+                fontSize: "10px",
+                color: guildageStatus === "synced" ? "var(--accent-green)" : "#6b7280",
+                fontFamily: "var(--font-mono)",
+              }}
+            >
+              Guildage {guildageStatus}
+            </span>
+          </div>
+        )}
         <Wallet />
         <div
           style={{

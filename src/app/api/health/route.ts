@@ -17,11 +17,16 @@ export async function GET() {
       .from("agents")
       .select("*", { count: "exact", head: true });
 
+    const { count: guildageCount } = await supabase
+      .from("guildage_agents")
+      .select("*", { count: "exact", head: true });
+
     const base = {
       service: "arbiter",
       version: "1.0.0",
       endpoints: [
         "/api/integration/verify",
+        "/api/integration/sync",
         "/api/health",
         "/api/demo",
         "/api/discover/free",
@@ -33,7 +38,12 @@ export async function GET() {
 
     if (error) {
       return NextResponse.json(
-        { ...base, status: "degraded", database: "unreachable" },
+        {
+          ...base,
+          status: "degraded",
+          database: "unreachable",
+          guildage_synced_agents: 0,
+        },
         { status: 200, headers: CORS }
       );
     }
@@ -44,6 +54,7 @@ export async function GET() {
         status: "ok",
         database: "connected",
         registered_agents: count ?? 0,
+        guildage_synced_agents: guildageCount ?? 0,
       },
       { status: 200, headers: CORS }
     );

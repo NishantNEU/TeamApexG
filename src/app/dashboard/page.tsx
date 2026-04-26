@@ -6,6 +6,24 @@ import Link from "next/link";
 
 // ---- Types ----
 
+interface GuildageEvent {
+  id: string;
+  event_type: string;
+  data: Record<string, any>;
+  source: string;
+  created_at: string;
+}
+
+interface GuildageAgent {
+  id: string;
+  name: string;
+  owner_name: string | null;
+  skills: string[];
+  token_balance: number;
+  deposit_sats: number;
+  synced_at: string;
+}
+
 interface Agent {
   id: string;
   name: string;
@@ -105,6 +123,9 @@ export default function DashboardPage() {
   const [demoLoading, setDemoLoading] = useState<string | null>(null);
   const [flashAgentId, setFlashAgentId] = useState<string | null>(null);
   const [flashTxId, setFlashTxId] = useState<string | null>(null);
+  const [guildageEvents, setGuildageEvents] = useState<GuildageEvent[]>([]);
+  const [guildageAgents, setGuildageAgents] = useState<GuildageAgent[]>([]);
+  const [flashGuildageId, setFlashGuildageId] = useState<string | null>(null);
 
   // ---- Fetch Data ----
 
@@ -132,13 +153,32 @@ export default function DashboardPage() {
     if (data.success) setStats(data.stats);
   }, []);
 
+  const fetchGuildageEvents = useCallback(async () => {
+    const { data } = await supabase
+      .from("guildage_events")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (data) setGuildageEvents(data);
+  }, []);
+
+  const fetchGuildageAgents = useCallback(async () => {
+    const { data } = await supabase
+      .from("guildage_agents")
+      .select("*")
+      .order("synced_at", { ascending: false });
+    if (data) setGuildageAgents(data);
+  }, []);
+
   // ---- Initial Load ----
 
   useEffect(() => {
     fetchAgents();
     fetchTransactions();
     fetchStats();
-  }, [fetchAgents, fetchTransactions, fetchStats]);
+    fetchGuildageEvents();
+    fetchGuildageAgents();
+  }, [fetchAgents, fetchTransactions, fetchStats, fetchGuildageEvents, fetchGuildageAgents]);
 
   // ---- Realtime Subscriptions ----
 
@@ -181,6 +221,36 @@ export default function DashboardPage() {
       supabase.removeChannel(channel);
     };
   }, [fetchAgents, fetchTransactions, fetchStats]);
+
+  // ---- Guildage Realtime ----
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("guildage-sync")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "guildage_events" },
+        (payload) => {
+          fetchGuildageEvents();
+          if (payload.new && (payload.new as any).id) {
+            setFlashGuildageId((payload.new as any).id);
+            setTimeout(() => setFlashGuildageId(null), 2000);
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "guildage_agents" },
+        () => {
+          fetchGuildageAgents();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchGuildageEvents, fetchGuildageAgents]);
 
   // ---- Demo Controls ----
 
@@ -669,6 +739,269 @@ export default function DashboardPage() {
           </div>
         </section>
       </div>
+
+      {/* ========== GUILDAGE SYNC SECTION ========== */}
+      <section
+        style={{
+          padding: "24px",
+          borderTop: "1px solid #1a1a2e",
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            marginBottom: "20px",
+          }}
+        >
+          <h2
+            style={{
+              fontSize: "13px",
+              color: "#6b7280",
+              letterSpacing: "2px",
+              fontWeight: 600,
+              margin: 0,
+            }}
+          >
+            GUILDAGE SYNC
+          </h2>
+          <span
+            style={{
+              fontSize: "11px",
+              padding: "2px 10px",
+              borderRadius: "20px",
+              background: "#a855f720",
+              color: "#a855f7",
+              border: "1px solid #a855f740",
+              fontFamily: "var(--font-mono)",
+            }}
+          >
+            {guildageAgents.length} agents synced
+          </span>
+          {guildageEvents.length > 0 && (
+            <span
+              style={{
+                fontSize: "11px",
+                padding: "2px 10px",
+                borderRadius: "20px",
+                background: "#22c55e20",
+                color: "#22c55e",
+                border: "1px solid #22c55e40",
+                fontFamily: "var(--font-mono)",
+              }}
+            >
+              {guildageEvents.length} events
+            </span>
+          )}
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 2fr",
+            gap: "16px",
+          }}
+        >
+          {/* Synced Agents */}
+          <div
+            style={{
+              background: "#10101c",
+              border: "1px solid #1a1a2e",
+              borderRadius: "12px",
+              padding: "16px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "11px",
+                color: "#6b7280",
+                letterSpacing: "1.5px",
+                marginBottom: "12px",
+                fontWeight: 600,
+              }}
+            >
+              GUILDAGE AGENTS
+            </div>
+            {guildageAgents.length === 0 ? (
+              <div style={{ color: "#3f3f50", fontSize: "12px", padding: "12px 0" }}>
+                No Guildage agents synced yet.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {guildageAgents.slice(0, 8).map((agent) => (
+                  <div
+                    key={agent.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "8px 12px",
+                      borderRadius: "6px",
+                      background: "#0a0a14",
+                      border: "1px solid #1a1a2e",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "#e4e4e7" }}>
+                        {agent.name}
+                      </div>
+                      <div style={{ fontSize: "10px", color: "#6b7280" }}>
+                        {agent.owner_name ?? "unknown owner"}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: "12px", color: "#a855f7", fontFamily: "var(--font-mono)" }}>
+                        {agent.token_balance.toLocaleString()} tkn
+                      </div>
+                      <div style={{ fontSize: "10px", color: "#f59e0b" }}>
+                        ⚡{agent.deposit_sats} sats
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Recent Events Feed */}
+          <div
+            style={{
+              background: "#10101c",
+              border: "1px solid #1a1a2e",
+              borderRadius: "12px",
+              padding: "16px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "11px",
+                color: "#6b7280",
+                letterSpacing: "1.5px",
+                marginBottom: "12px",
+                fontWeight: 600,
+              }}
+            >
+              RECENT GUILDAGE EVENTS
+            </div>
+            {guildageEvents.length === 0 ? (
+              <div style={{ color: "#3f3f50", fontSize: "12px", padding: "12px 0" }}>
+                No events yet. Guildage will push events here via POST /api/integration/sync
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                  maxHeight: "280px",
+                  overflowY: "auto",
+                }}
+              >
+                {guildageEvents.map((evt) => {
+                  const isTask = evt.event_type === "task";
+                  const hasVerification = isTask && evt.data?.verification?.score !== undefined;
+                  const score = hasVerification ? evt.data.verification.score : null;
+                  const tierColor =
+                    score === null ? "#6b7280"
+                    : score >= 90 ? "#a855f7"
+                    : score >= 75 ? "#22c55e"
+                    : score >= 50 ? "#eab308"
+                    : "#ef4444";
+
+                  const eventIcon =
+                    evt.event_type === "task" ? "⚡"
+                    : evt.event_type === "swap" ? "🔄"
+                    : evt.event_type === "borrow" ? "📦"
+                    : "📡";
+
+                  const eventColor =
+                    evt.event_type === "task" ? "#a855f7"
+                    : evt.event_type === "swap" ? "#3b82f6"
+                    : evt.event_type === "borrow" ? "#f59e0b"
+                    : "#6b7280";
+
+                  return (
+                    <div
+                      key={evt.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: "10px",
+                        padding: "10px 12px",
+                        borderRadius: "6px",
+                        background:
+                          flashGuildageId === evt.id
+                            ? "rgba(168, 85, 247, 0.1)"
+                            : "#0a0a14",
+                        border: `1px solid ${
+                          flashGuildageId === evt.id ? "#a855f740" : "#1a1a2e"
+                        }`,
+                        transition: "all 0.5s ease",
+                      }}
+                    >
+                      <span style={{ fontSize: "14px", marginTop: "1px" }}>{eventIcon}</span>
+
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "2px" }}>
+                          <span
+                            style={{
+                              fontSize: "11px",
+                              fontWeight: 700,
+                              letterSpacing: "1px",
+                              color: eventColor,
+                              textTransform: "uppercase",
+                            }}
+                          >
+                            {evt.event_type}
+                          </span>
+                          {hasVerification && score !== null && (
+                            <span
+                              style={{
+                                fontSize: "10px",
+                                padding: "1px 7px",
+                                borderRadius: "10px",
+                                background: `${tierColor}20`,
+                                color: tierColor,
+                                border: `1px solid ${tierColor}40`,
+                                fontFamily: "var(--font-mono)",
+                              }}
+                            >
+                              {evt.data.verification.trust_tier} · {score}
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "11px",
+                            color: "#6b7280",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {evt.event_type === "task" && evt.data?.description
+                            ? evt.data.description
+                            : evt.event_type === "swap" && evt.data?.skill_requested
+                            ? `Swap: ${evt.data.skill_requested}`
+                            : evt.event_type === "borrow" && evt.data?.skill_requested
+                            ? `Borrow: ${evt.data.skill_requested} · ${evt.data.tokens_paid} tkn`
+                            : JSON.stringify(evt.data).slice(0, 80)}
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: "10px", color: "#3f3f50", whiteSpace: "nowrap" }}>
+                        {timeAgo(evt.created_at)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
     </main>
   );
 }
