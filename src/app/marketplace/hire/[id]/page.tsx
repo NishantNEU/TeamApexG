@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
-import { useCheckout } from "@moneydevkit/nextjs";
+import OutputRenderer from "@/components/OutputRenderer";
 
 interface AgentProfile {
   id: string;
@@ -15,6 +15,14 @@ interface AgentProfile {
   stake_sats: number;
 }
 
+interface HireResult {
+  success: boolean;
+  job_id: string;
+  agent: { name: string; service_type: string; reputation_score: number; trust_tier: string };
+  work: { output: Record<string, any>; processing_time_ms: number };
+  verification: { passed: boolean; score: number; reasoning: string };
+  payment: { amount_sats: number; escrow_status: string; reputation_change: number };
+}
 
 const INPUT_CONFIGS: Record<string, { label: string; placeholder: string; fields: Array<{ key: string; label: string; type: "textarea" | "input"; placeholder: string }> }> = {
   summarizer: {
@@ -74,11 +82,12 @@ function getTierName(score: number): string {
 
 export default function HirePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { createCheckout, isLoading: checkoutLoading } = useCheckout();
   const [agent, setAgent] = useState<AgentProfile | null>(null);
   const [inputData, setInputData] = useState<Record<string, string>>({});
-  const [status, setStatus] = useState<"idle" | "paying">("idle");
+  const [status, setStatus] = useState<"idle" | "working" | "done">("idle");
+  const [result, setResult] = useState<HireResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState(0);
 
   useEffect(() => {
     fetch(`/api/agents/${id}`)
@@ -91,38 +100,55 @@ export default function HirePage({ params }: { params: Promise<{ id: string }> }
   const handleHire = async () => {
     if (!agent) return;
     setError(null);
-    setStatus("paying");
+    setStatus("working");
+    setStep(1);
 
-    // Build payload
-    const payload: Record<string, any> = {};
-    Object.entries(inputData).forEach(([key, val]) => {
-      payload[key] = key === "max_length" ? parseInt(val) || 100 : val;
-    });
+    const stepDelay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-    // Save input to sessionStorage so the success page can retrieve it
-    sessionStorage.setItem(`hire_input_${id}`, JSON.stringify(payload));
+    await stepDelay(800);
+    setStep(2);
 
     try {
-      const result = await createCheckout({
-        type: "AMOUNT",
-        title: `Hire ${agent.name}`,
-        description: `Pay to hire ${agent.name} for ${agent.service_type.replace("_", " ")}`,
-        amount: 500,
-        currency: "SAT",
-        successUrl: `${window.location.origin}/marketplace/hire/${id}/success`,
-        metadata: { agent_id: id, agent_name: agent.name },
+      const payload: Record<string, any> = {};
+      Object.entries(inputData).forEach(([key, val]) => {
+        if (key === "max_length") {
+          payload[key] = parseInt(val) || 100;
+        } else {
+          payload[key] = val;
+        }
       });
 
-      if (result.error) {
-        setError(result.error.message);
+      const res = await fetch("/api/hire", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          seller_agent_id: agent.id,
+          input_data: payload,
+          amount_sats: 500,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setError(data.error || "Hire failed");
         setStatus("idle");
+        setStep(0);
         return;
       }
 
-      window.location.href = result.data.checkoutUrl;
+      setStep(3);
+      await stepDelay(600);
+      setStep(4);
+      await stepDelay(600);
+      setStep(5);
+
+      setResult(data);
+      setStatus("done");
     } catch (err: any) {
-      setError(err.message || "Failed to create checkout. Please try again.");
+      setError(err.message || "Something went wrong");
       setStatus("idle");
+      setStep(0);
     }
   };
 
@@ -136,7 +162,6 @@ export default function HirePage({ params }: { params: Promise<{ id: string }> }
 
   const config = INPUT_CONFIGS[agent.service_type] || INPUT_CONFIGS.general;
   const tierColor = TIER_COLORS[getTierName(agent.reputation_score)] || "#6b7280";
-  const hasInput = Object.values(inputData).some((v) => v.trim());
 
   return (
     <main style={{ minHeight: "calc(100vh - var(--header-height))", maxWidth: "900px", margin: "0 auto", padding: "48px 32px" }}>
@@ -147,12 +172,14 @@ export default function HirePage({ params }: { params: Promise<{ id: string }> }
           ← Back to Marketplace
         </Link>
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <div style={{
-            width: "56px", height: "56px", borderRadius: "12px",
-            background: `${tierColor}15`, border: `2px solid ${tierColor}40`,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: "20px", fontWeight: 800, fontFamily: "var(--font-mono)", color: tierColor,
-          }}>
+          <div
+            style={{
+              width: "56px", height: "56px", borderRadius: "12px",
+              background: `${tierColor}15`, border: `2px solid ${tierColor}40`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "20px", fontWeight: 800, fontFamily: "var(--font-mono)", color: tierColor,
+            }}
+          >
             {agent.reputation_score}
           </div>
           <div>
@@ -176,17 +203,6 @@ export default function HirePage({ params }: { params: Promise<{ id: string }> }
           </p>
         )}
       </div>
-
-      {/* Redirecting to checkout */}
-      {status === "paying" && (
-        <div className="animate-in" style={{ textAlign: "center", padding: "60px 0" }}>
-          <div style={{ fontSize: "48px", marginBottom: "16px", animation: "pulse 1.5s infinite" }}>⚡</div>
-          <h2 style={{ fontSize: "22px", fontWeight: 700, marginBottom: "8px" }}>Redirecting to Lightning checkout...</h2>
-          <p style={{ color: "var(--text-muted)", fontSize: "14px" }}>
-            You'll scan a QR code to pay 500 sats via Lightning Network.
-          </p>
-        </div>
-      )}
 
       {/* Input Form */}
       {status === "idle" && (
@@ -245,7 +261,7 @@ export default function HirePage({ params }: { params: Promise<{ id: string }> }
           <div style={{ marginTop: "24px", padding: "16px 20px", borderRadius: "8px", background: "var(--bg-card)", border: "1px solid var(--border-subtle)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
               <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>Payment (held in escrow)</div>
-              <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>Released only if AI verifier approves the output</div>
+              <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>Released only if AI verifier approves output</div>
             </div>
             <div style={{ fontSize: "20px", fontWeight: 800, color: "var(--accent-amber)", fontFamily: "var(--font-mono)" }}>
               ⚡ 500 sats
@@ -254,19 +270,160 @@ export default function HirePage({ params }: { params: Promise<{ id: string }> }
 
           <button
             onClick={handleHire}
-            disabled={!hasInput || checkoutLoading}
+            disabled={!Object.values(inputData).some((v) => v.trim())}
             style={{
               marginTop: "24px", width: "100%", padding: "16px",
               borderRadius: "8px", border: "none", fontSize: "15px",
               fontWeight: 700, fontFamily: "var(--font-display)",
-              cursor: hasInput && !checkoutLoading ? "pointer" : "not-allowed",
-              background: hasInput && !checkoutLoading ? "var(--accent-purple)" : "var(--bg-elevated)",
-              color: hasInput && !checkoutLoading ? "#fff" : "var(--text-muted)",
+              cursor: Object.values(inputData).some((v) => v.trim()) ? "pointer" : "not-allowed",
+              background: Object.values(inputData).some((v) => v.trim()) ? "var(--accent-purple)" : "var(--bg-elevated)",
+              color: Object.values(inputData).some((v) => v.trim()) ? "#fff" : "var(--text-muted)",
               transition: "all 0.2s",
             }}
           >
-            {checkoutLoading ? "Creating invoice..." : `Pay ⚡ 500 sats to Hire ${agent.name}`}
+            Hire {agent.name} — Pay ⚡ 500 sats
           </button>
+        </div>
+      )}
+
+      {/* Processing Steps */}
+      {status === "working" && (
+        <div className="animate-in" style={{ padding: "40px 0" }}>
+          <h2 style={{ fontSize: "18px", fontWeight: 700, marginBottom: "32px" }}>Processing your task...</h2>
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            {[
+              { s: 1, label: "Escrow hold", desc: "500 sats locked in escrow" },
+              { s: 2, label: `${agent.name} is working`, desc: "AI agent processing your task..." },
+              { s: 3, label: "Verifying output", desc: "AI quality check in progress" },
+              { s: 4, label: "Settling payment", desc: "Processing escrow settlement" },
+            ].map((item) => (
+              <div
+                key={item.s}
+                style={{
+                  display: "flex", alignItems: "center", gap: "16px",
+                  padding: "16px 20px", borderRadius: "8px",
+                  background: step >= item.s ? "var(--bg-card)" : "transparent",
+                  border: `1px solid ${step >= item.s ? "var(--border-subtle)" : "transparent"}`,
+                  opacity: step >= item.s ? 1 : 0.3,
+                  transition: "all 0.5s",
+                }}
+              >
+                <div style={{
+                  width: "32px", height: "32px", borderRadius: "50%",
+                  background: step > item.s ? "var(--accent-green)" : step === item.s ? "var(--accent-purple)" : "var(--bg-elevated)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "14px", color: "#fff", fontWeight: 700,
+                  animation: step === item.s ? "pulse-glow 2s infinite" : "none",
+                }}>
+                  {step > item.s ? "✓" : item.s}
+                </div>
+                <div>
+                  <div style={{ fontSize: "14px", fontWeight: 600 }}>{item.label}</div>
+                  <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>{item.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Result */}
+      {status === "done" && result && (
+        <div className="animate-in" style={{ padding: "40px 0" }}>
+          {/* Verification status */}
+          <div style={{
+            padding: "24px", borderRadius: "12px", marginBottom: "24px",
+            background: result.verification.passed ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)",
+            border: `1px solid ${result.verification.passed ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)"}`,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: "20px", fontWeight: 800, color: result.verification.passed ? "var(--accent-green)" : "var(--accent-red)" }}>
+                  {result.verification.passed ? "✅ Verified & Paid" : "❌ Failed — Refunded"}
+                </div>
+                <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>
+                  Quality score: {result.verification.score}/100 — {result.verification.reasoning}
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "24px", fontWeight: 800, fontFamily: "var(--font-mono)", color: "var(--accent-amber)" }}>
+                  ⚡ {result.payment.amount_sats}
+                </div>
+                <div style={{ fontSize: "11px", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                  {result.payment.escrow_status}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Agent output — beautifully rendered */}
+          <div style={{ marginBottom: "24px" }}>
+            <h3 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "12px", color: "var(--text-secondary)" }}>
+              AGENT OUTPUT
+            </h3>
+            <OutputRenderer
+              service_type={result.agent.service_type}
+              output={result.work.output}
+            />
+            <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "8px", fontFamily: "var(--font-mono)" }}>
+              Processed in {result.work.processing_time_ms}ms
+            </div>
+          </div>
+
+          {/* Payment breakdown */}
+          <div style={{ marginBottom: "32px" }}>
+            <h3 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "12px", color: "var(--text-secondary)" }}>
+              PAYMENT BREAKDOWN
+            </h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {[
+                { label: "Escrow", value: `⚡ ${result.payment.amount_sats} sats`, status: result.payment.escrow_status, color: result.verification.passed ? "var(--accent-green)" : "var(--accent-red)" },
+                { label: "Verification fee", value: "⚡ 50 sats", status: "paid to verifier", color: "var(--accent-purple)" },
+                { label: "Reputation change", value: `${result.payment.reputation_change > 0 ? "+" : ""}${result.payment.reputation_change}`, status: `now ${result.agent.reputation_score}`, color: result.payment.reputation_change > 0 ? "var(--accent-green)" : "var(--accent-red)" },
+              ].map((item) => (
+                <div key={item.label} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "12px 16px", borderRadius: "6px",
+                  background: "var(--bg-card)", border: "1px solid var(--border-subtle)",
+                }}>
+                  <div>
+                    <span style={{ fontSize: "13px", fontWeight: 600 }}>{item.label}</span>
+                    <span style={{ fontSize: "11px", color: "var(--text-muted)", marginLeft: "8px" }}>{item.status}</span>
+                  </div>
+                  <span style={{ fontFamily: "var(--font-mono)", fontWeight: 700, color: item.color, fontSize: "14px" }}>
+                    {item.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: "flex", gap: "12px" }}>
+            <button
+              onClick={() => { setStatus("idle"); setResult(null); setStep(0); setInputData({}); }}
+              style={{
+                flex: 1, padding: "14px", borderRadius: "8px", border: "none",
+                background: "var(--accent-purple)", color: "#fff",
+                fontSize: "14px", fontWeight: 700, cursor: "pointer",
+                fontFamily: "var(--font-display)",
+              }}
+            >
+              Hire Again
+            </button>
+            <Link
+              href="/marketplace"
+              style={{
+                flex: 1, padding: "14px", borderRadius: "8px",
+                background: "var(--bg-card)", color: "var(--text-secondary)",
+                textDecoration: "none", fontSize: "14px", fontWeight: 600,
+                textAlign: "center", border: "1px solid var(--border-subtle)",
+                fontFamily: "var(--font-display)",
+              }}
+            >
+              Back to Marketplace
+            </Link>
+          </div>
         </div>
       )}
     </main>
