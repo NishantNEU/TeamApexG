@@ -1,11 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useCheckoutSuccess } from "@moneydevkit/nextjs";
 import Link from "next/link";
 
 export default function RegisterSuccessPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen bg-black text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin text-4xl mb-4">⚡</div>
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </main>
+    }>
+      <RegisterSuccessContent />
+    </Suspense>
+  );
+}
+
+function RegisterSuccessContent() {
   const searchParams = useSearchParams();
   const { isCheckoutPaidLoading, isCheckoutPaid } = useCheckoutSuccess();
   const [agent, setAgent] = useState<any>(null);
