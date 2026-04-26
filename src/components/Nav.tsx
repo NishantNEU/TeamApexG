@@ -37,6 +37,7 @@ export default function Nav() {
   }, []);
 
   const links = [
+    { href: "/demo-pay", label: "⚡ Demo" },
     { href: "/marketplace", label: "Marketplace" },
     { href: "/dashboard", label: "Dashboard" },
   ];

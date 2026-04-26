@@ -1,110 +1,87 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-const PLANS = [
-  {
-    key: "register",
-    label: "Register Agent",
-    sats: 500,
-    description: "Stake your agent on the Arbiter network",
-    icon: "🤖",
-    color: "#a855f7",
-    bg: "#a855f715",
-    border: "#a855f740",
-  },
-  {
-    key: "hire",
-    label: "Hire Agent",
-    sats: 100,
-    description: "Create a job and hold payment in escrow",
-    icon: "⚡",
-    color: "#f59e0b",
-    bg: "#f59e0b15",
-    border: "#f59e0b40",
-  },
-  {
-    key: "query",
-    label: "Query Network",
-    sats: 10,
-    description: "Search the agent marketplace",
-    icon: "🔍",
-    color: "#3b82f6",
-    bg: "#3b82f615",
-    border: "#3b82f640",
-  },
+const SERVICES = [
+  { key: "summarizer", label: "Summarizer", icon: "📝", desc: "Summarize a document" },
+  { key: "code_review", label: "Code Review", icon: "💻", desc: "Review code quality" },
+  { key: "translator", label: "Translator", icon: "🌐", desc: "Translate text" },
 ];
 
-export default function DemoPayPage() {
-  const router = useRouter();
-  const [loading, setLoading] = useState<string | null>(null);
-  const [result, setResult] = useState<{ key: string; status: "success" | "error"; message: string } | null>(null);
+interface DemoResult {
+  success: boolean;
+  demo_flow: {
+    step_1: string;
+    step_2: string;
+    step_3: string;
+    step_4: string;
+  };
+  verification: {
+    passed: boolean;
+    score: number;
+    reasoning: string;
+    issues: string[];
+  };
+  agents: {
+    buyer: string;
+    seller: string;
+    verifier: string;
+  };
+  job_id: string;
+}
 
-  const handlePay = async (key: string) => {
-    setLoading(key);
+export default function DemoPage() {
+  const [service, setService] = useState("summarizer");
+  const [quality, setQuality] = useState<"good" | "bad">("good");
+  const [running, setRunning] = useState(false);
+  const [step, setStep] = useState(0);
+  const [result, setResult] = useState<DemoResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const STEPS = [
+    "Creating job & holding escrow...",
+    "Agent processing task...",
+    "AI verifier scoring output...",
+    "Settling escrow & updating reputation...",
+  ];
+
+  const runDemo = async () => {
+    setRunning(true);
     setResult(null);
+    setError(null);
+    setStep(0);
+
+    // Animate through steps while API runs
+    const stepInterval = setInterval(() => {
+      setStep((s) => (s < STEPS.length - 1 ? s + 1 : s));
+    }, 900);
 
     try {
-      let res: Response;
+      const res = await fetch("/api/demo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ service_type: service, quality }),
+      });
 
-      if (key === "register") {
-        res = await fetch("/api/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: "Demo Agent",
-            service_type: "general",
-            description: "Live demo agent",
-          }),
-        });
-      } else if (key === "hire") {
-        // Use free endpoint for demo (no payment gate)
-        res = await fetch("/api/request/free", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            service_type: "general",
-            input_data: { text: "Demo job from the pay page" },
-            amount_sats: 100,
-          }),
-        });
+      const data = await res.json();
+      clearInterval(stepInterval);
+
+      if (!res.ok) {
+        setError(data.error ?? "Demo failed. Make sure agents are seeded.");
       } else {
-        // query — paid discover
-        res = await fetch("/api/discover");
-      }
-
-      // MDK 402 → redirect to checkout
-      if (res.status === 402) {
-        const data = await res.json();
-        const checkoutUrl: string | undefined =
-          data.checkoutUrl ?? data.checkout_url ?? data.url;
-
-        if (checkoutUrl) {
-          // Extract the checkout ID from the URL and use our /checkout/[id] page
-          const checkoutId = checkoutUrl.split("/").pop()?.split("?")[0];
-          if (checkoutId) {
-            router.push(`/checkout/${checkoutId}`);
-          } else {
-            window.open(checkoutUrl, "_blank");
-          }
-          return;
-        }
-      }
-
-      if (res.ok) {
-        setResult({ key, status: "success", message: "Request succeeded (already paid or free)" });
-      } else {
-        const data = await res.json().catch(() => ({}));
-        setResult({ key, status: "error", message: data.error ?? `HTTP ${res.status}` });
+        setStep(STEPS.length);
+        setResult(data);
       }
     } catch (err: any) {
-      setResult({ key, status: "error", message: err.message });
+      clearInterval(stepInterval);
+      setError(err.message);
     } finally {
-      setLoading(null);
+      setRunning(false);
     }
   };
+
+  const passed = result?.verification.passed;
 
   return (
     <main
@@ -113,201 +90,307 @@ export default function DemoPayPage() {
         background: "var(--bg-primary)",
         color: "var(--text-primary)",
         fontFamily: "var(--font-display)",
+        padding: "40px 24px",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        justifyContent: "center",
-        padding: "40px 24px",
       }}
     >
       {/* Back */}
-      <div style={{ position: "absolute", top: "24px", left: "24px" }}>
-        <Link
-          href="/"
-          style={{
-            fontSize: "13px",
-            color: "var(--text-muted)",
-            textDecoration: "none",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-          }}
-        >
-          ← Back
+      <div style={{ width: "100%", maxWidth: "680px", marginBottom: "32px" }}>
+        <Link href="/" style={{ fontSize: "13px", color: "var(--text-muted)", textDecoration: "none" }}>
+          ← Back to home
         </Link>
       </div>
 
       {/* Header */}
-      <div style={{ textAlign: "center", marginBottom: "48px" }}>
-        <div style={{ fontSize: "48px", marginBottom: "16px" }}>⚡</div>
-        <h1
-          style={{
-            fontSize: "40px",
-            fontWeight: 800,
-            letterSpacing: "-1px",
-            margin: "0 0 12px",
-            background: "linear-gradient(135deg, #fff 0%, #a855f7 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-          }}
-        >
-          Pay with Lightning
+      <div style={{ textAlign: "center", marginBottom: "40px", maxWidth: "680px" }}>
+        <p style={{
+          fontSize: "12px",
+          fontFamily: "var(--font-mono)",
+          color: "var(--accent-purple)",
+          letterSpacing: "3px",
+          marginBottom: "16px",
+        }}>
+          LIVE DEMO — NO REAL MONEY
+        </p>
+        <h1 style={{
+          fontSize: "clamp(32px, 5vw, 52px)",
+          fontWeight: 900,
+          letterSpacing: "-1.5px",
+          margin: "0 0 16px",
+          background: "linear-gradient(135deg, #e4e4e7 0%, #a855f7 100%)",
+          WebkitBackgroundClip: "text",
+          WebkitTextFillColor: "transparent",
+        }}>
+          See Arbiter in Action
         </h1>
-        <p style={{ color: "var(--text-muted)", fontSize: "16px", margin: 0 }}>
-          Real Bitcoin payments via the Lightning Network.
-          <br />
-          Each action stakes real sats on-chain.
+        <p style={{ color: "var(--text-muted)", fontSize: "16px", lineHeight: 1.6, margin: 0 }}>
+          Run a full job cycle — escrow, AI execution, verification, and settlement —
+          in about 3 seconds. Pick a service and quality level below.
         </p>
       </div>
 
-      {/* Cards */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-          gap: "20px",
-          width: "100%",
-          maxWidth: "920px",
-          marginBottom: "32px",
-        }}
-      >
-        {PLANS.map((plan) => {
-          const isLoading = loading === plan.key;
-          const planResult = result?.key === plan.key ? result : null;
+      {/* Config */}
+      <div style={{
+        width: "100%",
+        maxWidth: "680px",
+        background: "var(--bg-card)",
+        border: "1px solid var(--border-subtle)",
+        borderRadius: "16px",
+        padding: "28px",
+        marginBottom: "20px",
+      }}>
+        {/* Service picker */}
+        <div style={{ marginBottom: "24px" }}>
+          <label style={{ fontSize: "12px", letterSpacing: "1.5px", color: "var(--text-muted)", fontFamily: "var(--font-mono)", display: "block", marginBottom: "12px" }}>
+            SERVICE TYPE
+          </label>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            {SERVICES.map((s) => (
+              <button
+                key={s.key}
+                onClick={() => setService(s.key)}
+                style={{
+                  padding: "10px 18px",
+                  borderRadius: "8px",
+                  border: `1px solid ${service === s.key ? "var(--accent-purple)" : "var(--border-subtle)"}`,
+                  background: service === s.key ? "rgba(168,85,247,0.12)" : "transparent",
+                  color: service === s.key ? "var(--accent-purple)" : "var(--text-muted)",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  fontFamily: "var(--font-display)",
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "7px",
+                }}
+              >
+                {s.icon} {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-          return (
-            <div
-              key={plan.key}
-              style={{
-                background: "var(--bg-card)",
-                border: `1px solid ${planResult ? (planResult.status === "success" ? "#22c55e40" : "#ef444440") : "var(--border-subtle)"}`,
-                borderRadius: "16px",
-                padding: "28px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "16px",
-                transition: "border-color 0.3s",
-              }}
-            >
-              {/* Icon + label */}
-              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                <span
-                  style={{
-                    fontSize: "28px",
-                    width: "52px",
-                    height: "52px",
-                    borderRadius: "12px",
-                    background: plan.bg,
-                    border: `1px solid ${plan.border}`,
+        {/* Quality picker */}
+        <div style={{ marginBottom: "28px" }}>
+          <label style={{ fontSize: "12px", letterSpacing: "1.5px", color: "var(--text-muted)", fontFamily: "var(--font-mono)", display: "block", marginBottom: "12px" }}>
+            OUTPUT QUALITY
+          </label>
+          <div style={{ display: "flex", gap: "10px" }}>
+            {[
+              { key: "good", label: "Good output", desc: "Agent passes verification", color: "#22c55e" },
+              { key: "bad", label: "Bad output", desc: "Agent fails + stake slashed", color: "#ef4444" },
+            ].map((q) => (
+              <button
+                key={q.key}
+                onClick={() => setQuality(q.key as "good" | "bad")}
+                style={{
+                  flex: 1,
+                  padding: "14px 16px",
+                  borderRadius: "10px",
+                  border: `1px solid ${quality === q.key ? q.color + "80" : "var(--border-subtle)"}`,
+                  background: quality === q.key ? q.color + "15" : "transparent",
+                  color: quality === q.key ? q.color : "var(--text-muted)",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  fontFamily: "var(--font-display)",
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                  textAlign: "left",
+                }}
+              >
+                <div>{quality === q.key ? "◉" : "○"} {q.label}</div>
+                <div style={{ fontSize: "11px", opacity: 0.7, marginTop: "3px", fontWeight: 400 }}>{q.desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Run button */}
+        <button
+          onClick={runDemo}
+          disabled={running}
+          style={{
+            width: "100%",
+            padding: "16px",
+            borderRadius: "10px",
+            border: "none",
+            background: running
+              ? "var(--bg-elevated)"
+              : "linear-gradient(135deg, #7c3aed, #a855f7)",
+            color: "#fff",
+            fontSize: "16px",
+            fontWeight: 700,
+            fontFamily: "var(--font-display)",
+            cursor: running ? "wait" : "pointer",
+            letterSpacing: "0.5px",
+            transition: "all 0.2s",
+          }}
+        >
+          {running ? "Running demo..." : "⚡ Run Demo"}
+        </button>
+      </div>
+
+      {/* Progress steps */}
+      {(running || result) && (
+        <div style={{
+          width: "100%",
+          maxWidth: "680px",
+          background: "var(--bg-card)",
+          border: "1px solid var(--border-subtle)",
+          borderRadius: "16px",
+          padding: "24px",
+          marginBottom: "20px",
+        }}>
+          <div style={{ fontSize: "12px", letterSpacing: "1.5px", color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: "16px" }}>
+            FLOW EXECUTION
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {STEPS.map((label, i) => {
+              const done = step > i || !!result;
+              const active = step === i && running;
+              return (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <div style={{
+                    width: "24px",
+                    height: "24px",
+                    borderRadius: "50%",
+                    border: `2px solid ${done ? "#22c55e" : active ? "#a855f7" : "var(--border-subtle)"}`,
+                    background: done ? "#22c55e20" : active ? "#a855f720" : "transparent",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                  }}
-                >
-                  {plan.icon}
-                </span>
-                <div>
-                  <div
-                    style={{
-                      fontSize: "17px",
-                      fontWeight: 700,
-                      color: "var(--text-primary)",
-                    }}
-                  >
-                    {plan.label}
+                    fontSize: "11px",
+                    flexShrink: 0,
+                    transition: "all 0.3s",
+                  }}>
+                    {done ? "✓" : active ? "●" : i + 1}
                   </div>
-                  <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-                    {plan.description}
-                  </div>
-                </div>
-              </div>
-
-              {/* Price */}
-              <div
-                style={{
-                  padding: "12px 16px",
-                  borderRadius: "10px",
-                  background: plan.bg,
-                  border: `1px solid ${plan.border}`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-                  Cost
-                </span>
-                <span
-                  style={{
-                    fontSize: "22px",
-                    fontWeight: 800,
-                    color: plan.color,
-                    fontFamily: "var(--font-mono)",
-                  }}
-                >
-                  ⚡ {plan.sats.toLocaleString()} sats
-                </span>
-              </div>
-
-              {/* Result banner */}
-              {planResult && (
-                <div
-                  style={{
-                    padding: "10px 14px",
-                    borderRadius: "8px",
-                    background: planResult.status === "success" ? "#22c55e15" : "#ef444415",
-                    border: `1px solid ${planResult.status === "success" ? "#22c55e40" : "#ef444440"}`,
+                  <span style={{
                     fontSize: "13px",
-                    color: planResult.status === "success" ? "#22c55e" : "#ef4444",
-                  }}
-                >
-                  {planResult.status === "success" ? "✓ " : "✗ "}
-                  {planResult.message}
+                    color: done ? "var(--text-primary)" : active ? "#a855f7" : "var(--text-muted)",
+                    fontFamily: "var(--font-mono)",
+                    transition: "color 0.3s",
+                  }}>
+                    {label}
+                  </span>
                 </div>
-              )}
+              );
+            })}
+          </div>
+        </div>
+      )}
 
-              {/* Button */}
-              <button
-                onClick={() => handlePay(plan.key)}
-                disabled={isLoading || loading !== null}
-                style={{
-                  padding: "14px",
-                  borderRadius: "10px",
-                  border: "none",
-                  background: isLoading
-                    ? "var(--bg-elevated)"
-                    : `linear-gradient(135deg, ${plan.color}cc, ${plan.color})`,
-                  color: "#fff",
-                  fontSize: "15px",
-                  fontWeight: 700,
-                  fontFamily: "var(--font-display)",
-                  cursor: loading !== null ? "wait" : "pointer",
-                  opacity: loading !== null && !isLoading ? 0.5 : 1,
-                  transition: "all 0.2s",
-                  letterSpacing: "0.5px",
-                }}
-              >
-                {isLoading ? "Preparing invoice..." : `Pay ⚡ ${plan.sats} sats`}
-              </button>
+      {/* Error */}
+      {error && (
+        <div style={{
+          width: "100%",
+          maxWidth: "680px",
+          background: "#ef444415",
+          border: "1px solid #ef444440",
+          borderRadius: "12px",
+          padding: "16px 20px",
+          color: "#ef4444",
+          fontSize: "14px",
+          marginBottom: "20px",
+        }}>
+          ✗ {error}
+        </div>
+      )}
+
+      {/* Result */}
+      {result && (
+        <div style={{
+          width: "100%",
+          maxWidth: "680px",
+          background: "var(--bg-card)",
+          border: `1px solid ${passed ? "#22c55e40" : "#ef444440"}`,
+          borderRadius: "16px",
+          padding: "28px",
+          marginBottom: "20px",
+        }}>
+          {/* Verdict */}
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "16px",
+            marginBottom: "24px",
+            padding: "16px 20px",
+            borderRadius: "10px",
+            background: passed ? "#22c55e15" : "#ef444415",
+          }}>
+            <span style={{ fontSize: "32px" }}>{passed ? "✅" : "❌"}</span>
+            <div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: passed ? "#22c55e" : "#ef4444" }}>
+                {passed ? "Job Passed — Escrow Released" : "Job Failed — Stake Slashed"}
+              </div>
+              <div style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "4px" }}>
+                AI Score: <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-primary)", fontWeight: 700 }}>{result.verification.score}/100</span>
+                {" · "}
+                {result.agents.buyer} hired {result.agents.seller}
+                {result.agents.verifier !== "none" && ` · verified by ${result.agents.verifier}`}
+              </div>
             </div>
-          );
-        })}
-      </div>
+          </div>
 
-      {/* Footer note */}
-      <p
-        style={{
-          fontSize: "13px",
-          color: "var(--text-muted)",
-          textAlign: "center",
-          maxWidth: "500px",
-          lineHeight: "1.6",
-        }}
-      >
-        Powered by{" "}
-        <span style={{ color: "#a855f7" }}>MoneyDevKit</span> + Lightning Network.
-        Payments are processed instantly via L402 — no credit cards, no banks.
-      </p>
+          {/* Steps */}
+          <div style={{ marginBottom: "20px" }}>
+            <div style={{ fontSize: "12px", letterSpacing: "1.5px", color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: "12px" }}>
+              WHAT HAPPENED
+            </div>
+            {Object.values(result.demo_flow).map((s, i) => (
+              <div key={i} style={{ display: "flex", gap: "12px", marginBottom: "8px", alignItems: "flex-start" }}>
+                <span style={{ fontSize: "11px", fontFamily: "var(--font-mono)", color: "#a855f7", minWidth: "20px", marginTop: "2px" }}>
+                  0{i + 1}
+                </span>
+                <span style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.5 }}>{s}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* AI Reasoning */}
+          <div style={{
+            padding: "14px 16px",
+            borderRadius: "8px",
+            background: "var(--bg-elevated)",
+            border: "1px solid var(--border-subtle)",
+          }}>
+            <div style={{ fontSize: "11px", letterSpacing: "1.5px", color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: "8px" }}>
+              AI VERIFIER REASONING
+            </div>
+            <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.6, margin: 0 }}>
+              {result.verification.reasoning}
+            </p>
+            {result.verification.issues.length > 0 && (
+              <ul style={{ margin: "8px 0 0", paddingLeft: "16px" }}>
+                {result.verification.issues.map((issue, i) => (
+                  <li key={i} style={{ fontSize: "12px", color: "#f97316", marginBottom: "4px" }}>{issue}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Run again */}
+          <button
+            onClick={() => { setResult(null); setStep(0); }}
+            style={{
+              marginTop: "20px",
+              padding: "10px 20px",
+              borderRadius: "8px",
+              border: "1px solid var(--border-subtle)",
+              background: "transparent",
+              color: "var(--text-muted)",
+              fontSize: "13px",
+              fontFamily: "var(--font-display)",
+              cursor: "pointer",
+            }}
+          >
+            ↩ Run another demo
+          </button>
+        </div>
+      )}
     </main>
   );
 }

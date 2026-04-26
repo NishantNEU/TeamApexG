@@ -80,7 +80,7 @@ export default function Home() {
             style={{ display: "flex", gap: "16px", justifyContent: "center", flexWrap: "wrap" }}
           >
             <Link
-              href="/marketplace"
+              href="/demo-pay"
               style={{
                 padding: "16px 40px",
                 borderRadius: "8px",
@@ -90,6 +90,22 @@ export default function Home() {
                 fontSize: "15px",
                 fontWeight: 700,
                 letterSpacing: "0.5px",
+                transition: "all 0.2s",
+              }}
+            >
+              ⚡ Try Live Demo
+            </Link>
+            <Link
+              href="/marketplace"
+              style={{
+                padding: "16px 40px",
+                borderRadius: "8px",
+                background: "transparent",
+                color: "var(--text-secondary)",
+                textDecoration: "none",
+                fontSize: "15px",
+                fontWeight: 600,
+                border: "1px solid var(--border-subtle)",
                 transition: "all 0.2s",
               }}
             >
