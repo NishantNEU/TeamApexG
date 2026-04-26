@@ -14,7 +14,8 @@
       "Read(//c/Users/Sandeep Patil/Desktop/arbiter/**)",
       "Bash(done)",
       "Bash(python -c \"import sys,json; a=next\\(\\(a for a in json.load\\(sys.stdin\\)[''''results''''][''''agents''''] if a[''''name'''']==''''Story Spark''''\\),None\\); print\\(f''''jobs_completed={a[\"\"total_jobs_completed\"\"]} reputation={a[\"\"reputation_score\"\"]}''''\\)\")",
-      "Bash(python -c \"import sys; v=sys.stdin.read\\(\\).strip\\(\\); print\\(''''MDK_ACCESS_TOKEN: SET'''' if v else ''''MDK_ACCESS_TOKEN: EMPTY''''\\)\")"
+      "Bash(python -c \"import sys; v=sys.stdin.read\\(\\).strip\\(\\); print\\(''''MDK_ACCESS_TOKEN: SET'''' if v else ''''MDK_ACCESS_TOKEN: EMPTY''''\\)\")",
+      "Bash(npm info:*)"
     ]
   }
 }
