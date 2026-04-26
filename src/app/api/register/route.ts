@@ -15,7 +15,7 @@ const ALLOWED_SERVICES = [
   "general",
 ];
 
-const registerHandler = async (req: NextRequest) => {
+const registerHandler = async (req: Request) => {
   try {
     const body = await req.json();
     const { name, service_type, description, endpoint_url } = body;

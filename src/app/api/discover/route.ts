@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 
 const QUERY_FEE_SATS = 10;
 
-const discoverHandler = async (req: NextRequest) => {
+const discoverHandler = async (req: Request) => {
   try {
     const { searchParams } = new URL(req.url);
 

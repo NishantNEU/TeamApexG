@@ -3,7 +3,7 @@ import { withPayment } from "@moneydevkit/nextjs/server";
 import { supabase } from "@/lib/supabase";
 import { v4 as uuidv4 } from "uuid";
 
-const requestHandler = async (req: NextRequest) => {
+const requestHandler = async (req: Request) => {
   try {
     const body = await req.json();
 
